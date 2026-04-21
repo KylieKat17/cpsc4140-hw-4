@@ -93,7 +93,11 @@ public class FittsLawApp extends Application {
         root.setTop(buildTopBar(primaryStage));
 
         // ----- Scene -----
-        Scene scene = new Scene(root, 950, 680);
+        // Size the window to fit within the screen's available height.
+        javafx.geometry.Rectangle2D screenBounds = javafx.stage.Screen.getPrimary().getVisualBounds();
+        double windowHeight = Math.min(680, screenBounds.getHeight() - 40);
+        double windowWidth  = Math.min(950, screenBounds.getWidth()  - 40);
+        Scene scene = new Scene(root, windowWidth, windowHeight);
 
         // Keyboard shortcuts: Ctrl+G = Go!, Ctrl+Q = Quit
         scene.getAccelerators().put(
@@ -115,8 +119,6 @@ public class FittsLawApp extends Application {
          */
         primaryStage.setOnCloseRequest(e -> controller.forceClose());
 
-        // Launch maximized so the window fits the screen without needing to resize.
-        primaryStage.setMaximized(true);
         primaryStage.show();
     }
 

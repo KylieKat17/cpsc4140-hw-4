@@ -1,0 +1,9 @@
+funshapes\shapes\ShapeSpawner.class
+funshapes\controller\ExperimentController.class
+module-info.class
+funshapes\app\FittsLawTabApp.class
+funshapes\shapes\CircleSpawner.class
+funshapes\controller\KidsExperimentController.class
+funshapes\shapes\SpawnContext.class
+funshapes\shapes\KidsTargetSpawner.class
+funshapes\model\AppModel.class

@@ -130,7 +130,11 @@ public class FittsLawTabApp extends Application {
         root.setCenter(tabPane);
 
         // ----- Scene -----
-        Scene scene = new Scene(root, 1000, 720);
+        // Size the window to fit within the screen's available height.
+        javafx.geometry.Rectangle2D screenBounds = javafx.stage.Screen.getPrimary().getVisualBounds();
+        double windowHeight = Math.min(720, screenBounds.getHeight() - 40);
+        double windowWidth  = Math.min(1000, screenBounds.getWidth() - 40);
+        Scene scene = new Scene(root, windowWidth, windowHeight);
         primaryStage.setTitle("HW-4 Extra Credit: Fitts' Law Simulator – Kylie Gilbert");
         primaryStage.setScene(scene);
 
@@ -140,8 +144,6 @@ public class FittsLawTabApp extends Application {
             kidsController.forceClose();
         });
 
-        // Launch maximized so the window fits the screen without needing to resize.
-        primaryStage.setMaximized(true);
         primaryStage.show();
     }
 
