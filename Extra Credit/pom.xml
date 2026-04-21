@@ -4,9 +4,9 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.example</groupId>
-    <artifactId>HW4</artifactId>
+    <artifactId>HW4-ExtraCredit</artifactId>
     <version>1.0-SNAPSHOT</version>
-    <n>HW4</n>
+    <n>HW4-ExtraCredit</n>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.release>21</maven.compiler.release>
@@ -39,7 +39,7 @@
                 <artifactId>javafx-maven-plugin</artifactId>
                 <version>0.0.8</version>
                 <configuration>
-                    <mainClass>funshapes/funshapes.app.FittsLawApp</mainClass>
+                    <mainClass>funshapes/funshapes.app.FittsLawTabApp</mainClass>
                 </configuration>
             </plugin>
             <plugin>

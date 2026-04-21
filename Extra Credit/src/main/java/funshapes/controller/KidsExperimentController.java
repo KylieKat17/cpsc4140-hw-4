@@ -1,9 +1,10 @@
 package funshapes.controller;
 
 import funshapes.model.AppModel;
-import funshapes.shapes.CircleSpawner;
+import funshapes.shapes.KidsTargetSpawner;
 import funshapes.shapes.SpawnContext;
 import javafx.animation.KeyFrame;
+import javafx.animation.ScaleTransition;
 import javafx.animation.Timeline;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
@@ -25,37 +26,24 @@ import java.io.IOException;
 import java.io.PrintWriter;
 
 /**
- * ExperimentController drives the full Fitts' Law trial loop.
+ * KidsExperimentController drives the Fitts' Law trial loop for the kids' game tab.
  *
  * <p>
- * Responsibilities:
- * <ul>
- *   <li>5-to-0 countdown before the first trial</li>
- *   <li>Spawning circle targets at random size and position per trial</li>
- *   <li>Measuring time from target display to click</li>
- *   <li>Writing trial data to CSV</li>
- *   <li>Exposing a {@code statusProperty} so the UI can reflect live progress</li>
- *   <li>Notifying the app on completion so Go! can be re-enabled</li>
- * </ul>
+ * Functionally identical to {@link ExperimentController} but uses
+ * {@link KidsTargetSpawner} (star targets) and writes to a separate CSV file
+ * ({@code fitts_results_kids.csv}).  Targets also get a brief pop-in scale
+ * animation on spawn to keep the experience lively.
  * </p>
- *
- * <b>Correspondences:</b><br>
- *   drawingPane    = Pane on which targets are rendered<br>
- *   spawner        = CircleSpawner strategy used to build targets<br>
- *   trialNumber    = 1-based current trial index (0 = not started)<br>
- *   lastTargetX/Y  = previous target center for distance calculation<br>
- *   trialStartTime = ms timestamp when current target appeared<br>
- *   csvWriter      = open writer to the output CSV file
  *
  * <b>Invariants:</b><br>
  *   TOTAL_TRIALS >= 50<br>
  *   trialNumber in [0, TOTAL_TRIALS] during a session<br>
- *   activeShape == null OR fully contained within drawingPane
+ *   activeShape == null OR fully inside drawingPane
  *
  * @author Kylie Gilbert
- * @version HW-4 – CPSC 4140 – Spring 2026
+ * @version HW-4 Extra Credit – CPSC 4140 – Spring 2026
  */
-public class ExperimentController {
+public class KidsExperimentController {
 
     // -----------------------------------------------------------------------
     // Constants
@@ -64,54 +52,34 @@ public class ExperimentController {
     /** Number of trials per session. Must be >= 50. */
     public static final int TOTAL_TRIALS = 50;
 
-    /** Padding (px) so targets never clip the pane edge. */
-    private static final double EDGE_PADDING = 8.0;
-
-    /** CSV output file path (relative to working directory). */
-    private static final String CSV_FILENAME = "fitts_results.csv";
+    private static final double EDGE_PADDING  = 10.0;
+    private static final String CSV_FILENAME  = "fitts_results_kids.csv";
 
     // -----------------------------------------------------------------------
     // Dependencies
     // -----------------------------------------------------------------------
 
-    private final AppModel      model;
-    private final Pane          drawingPane;
-    private final CircleSpawner spawner = new CircleSpawner();
+    private final AppModel          model;
+    private final Pane              drawingPane;
+    private final KidsTargetSpawner spawner = new KidsTargetSpawner();
 
     // -----------------------------------------------------------------------
-    // Observable state (bound by the status panel)
+    // Observable state
     // -----------------------------------------------------------------------
 
-    /**
-     * Human-readable status string, e.g. "Trial 3 / 50".
-     * The right-side status panel binds to this property.
-     */
     private final StringProperty statusProperty = new SimpleStringProperty("Ready — press Go! to begin.");
 
     // -----------------------------------------------------------------------
     // Internal experiment state
     // -----------------------------------------------------------------------
 
-    /** Currently displayed target Node. Null when no target is on screen. */
-    private Node activeShape;
-
-    /** 1-based trial index. Zero means experiment has not started. */
-    private int trialNumber = 0;
-
-    /** Center X of the previous trial's target. */
-    private double lastTargetX = 0.0;
-
-    /** Center Y of the previous trial's target. */
-    private double lastTargetY = 0.0;
-
-    /** System.currentTimeMillis() snapshot when the current target appeared. */
-    private long trialStartTime = 0L;
-
-    /** Open writer for CSV output. Non-null only while the experiment runs. */
+    private Node        activeShape;
+    private int         trialNumber    = 0;
+    private double      lastTargetX    = 0.0;
+    private double      lastTargetY    = 0.0;
+    private long        trialStartTime = 0L;
     private PrintWriter csvWriter;
-
-    /** Invoked when the session finishes so the app can re-enable Go!. */
-    private Runnable onExperimentComplete;
+    private Runnable    onExperimentComplete;
 
     // -----------------------------------------------------------------------
     // Constructor
@@ -119,9 +87,9 @@ public class ExperimentController {
 
     /**
      * @pre model != null AND drawingPane != null
-     * @post Controller is bound to the model and pane; no experiment running.
+     * @post Controller bound to model and pane; no experiment running.
      */
-    public ExperimentController(AppModel model, Pane drawingPane) {
+    public KidsExperimentController(AppModel model, Pane drawingPane) {
         this.model       = model;
         this.drawingPane = drawingPane;
     }
@@ -130,30 +98,19 @@ public class ExperimentController {
     // Public API
     // -----------------------------------------------------------------------
 
-    /**
-     * Returns the observable status string for UI binding.
-     *
-     * @pre none
-     * @post Returns non-null property.
-     */
+    /** @pre none  @post Returns non-null observable status string. */
     public StringProperty statusProperty() { return statusProperty; }
 
-    /**
-     * Registers a callback invoked when all trials complete.
-     *
-     * @pre none
-     * @post onExperimentComplete is set.
-     */
+    /** @pre none  @post Completion callback registered. */
     public void setOnExperimentComplete(Runnable callback) {
         this.onExperimentComplete = callback;
     }
 
     /**
-     * Starts the experiment: opens the CSV and begins the 5-to-0 countdown.
-     * No-op if already in progress.
+     * Opens CSV and begins the countdown. No-op if already running.
      *
-     * @pre drawingPane has valid dimensions when the countdown ends
-     * @post csvWriter is open; countdown is running.
+     * @pre drawingPane has valid dimensions by the time countdown ends
+     * @post csvWriter is open; countdown animating.
      */
     public void beginExperiment() {
         if (trialNumber > 0) return;
@@ -172,16 +129,13 @@ public class ExperimentController {
     }
 
     /**
-     * Closes the CSV writer if the session is interrupted (e.g. window closed).
+     * Flushes and closes the CSV if interrupted mid-session.
      *
      * @pre none
-     * @post csvWriter is closed and set to null.
+     * @post csvWriter closed and null.
      */
     public void forceClose() {
-        if (csvWriter != null) {
-            csvWriter.close();
-            csvWriter = null;
-        }
+        if (csvWriter != null) { csvWriter.close(); csvWriter = null; }
     }
 
     // -----------------------------------------------------------------------
@@ -189,21 +143,28 @@ public class ExperimentController {
     // -----------------------------------------------------------------------
 
     /**
-     * Displays a 5-to-0 countdown, then calls startNextTrial().
+     * Animates a fun 5-to-0 countdown with large colorful text.
      *
      * @pre drawingPane != null
-     * @post A Timeline animates the countdown; first trial begins on completion.
+     * @post Timeline plays; first trial begins on completion.
      */
     private void showCountdown() {
         Text countdownText = new Text("5");
-        countdownText.setFont(Font.font("SansSerif", FontWeight.BOLD, 120));
-        countdownText.setFill(Color.STEELBLUE);
+        countdownText.setFont(Font.font("SansSerif", FontWeight.BOLD, 140));
+        countdownText.setFill(Color.web("#FF6B6B"));
 
         StackPane overlay = new StackPane(countdownText);
         overlay.prefWidthProperty().bind(drawingPane.widthProperty());
         overlay.prefHeightProperty().bind(drawingPane.heightProperty());
         overlay.setAlignment(Pos.CENTER);
         drawingPane.getChildren().add(overlay);
+
+        // Cycling countdown colors to add visual interest for kids.
+        Color[] countColors = {
+            Color.web("#FF6B6B"), Color.web("#FFD93D"),
+            Color.web("#6BCB77"), Color.web("#4D96FF"),
+            Color.web("#FF9FF3")
+        };
 
         final int[] count = {5};
         Timeline timer = new Timeline();
@@ -212,6 +173,7 @@ public class ExperimentController {
             count[0]--;
             if (count[0] > 0) {
                 countdownText.setText(String.valueOf(count[0]));
+                countdownText.setFill(countColors[count[0] % countColors.length]);
                 statusProperty.set("Starting in " + count[0] + "…");
             } else {
                 drawingPane.getChildren().remove(overlay);
@@ -226,7 +188,7 @@ public class ExperimentController {
     // -----------------------------------------------------------------------
 
     /**
-     * Increments trial counter and shows the next target or concludes.
+     * Advances trial counter; shows next target or concludes.
      *
      * @pre csvWriter != null
      * @post trialNumber incremented; showTarget() or concludeExperiment() called.
@@ -236,19 +198,18 @@ public class ExperimentController {
         if (trialNumber > TOTAL_TRIALS) {
             concludeExperiment();
         } else {
-            statusProperty.set("Trial " + trialNumber + " / " + TOTAL_TRIALS);
+            statusProperty.set("⭐ Trial " + trialNumber + " / " + TOTAL_TRIALS + " — click the star!");
             showTarget();
         }
     }
 
     /**
-     * Builds and displays a circle target at a random size and position.
-     * Captures start time after the target is added to the pane.
+     * Builds and shows a star target at a random size and position.
+     * A pop-in scale animation makes the spawn feel bouncy and fun.
      *
      * @pre trialNumber in [1, TOTAL_TRIALS]
      * @pre drawingPane has valid positive dimensions
-     * @post activeShape != null and fully contained within drawingPane.
-     *       trialStartTime reflects the time the target appeared.
+     * @post activeShape != null and inside drawingPane; trialStartTime set after pop-in.
      */
     private void showTarget() {
         removeActiveShapeIfPresent();
@@ -260,27 +221,22 @@ public class ExperimentController {
             return;
         }
 
-        // Random radius within Fitts' Law trial range.
-        double radius = CircleSpawner.MIN_TRIAL_RADIUS
+        double radius = KidsTargetSpawner.MIN_TRIAL_RADIUS
                 + model.getRandomGenerator().nextDouble()
-                * (CircleSpawner.MAX_TRIAL_RADIUS - CircleSpawner.MIN_TRIAL_RADIUS);
+                * (KidsTargetSpawner.MAX_TRIAL_RADIUS - KidsTargetSpawner.MIN_TRIAL_RADIUS);
 
-        // Constrain center so circle stays fully inside pane.
-        double minX = radius + EDGE_PADDING;
-        double maxX = paneW - radius - EDGE_PADDING;
-        double minY = radius + EDGE_PADDING;
-        double maxY = paneH - radius - EDGE_PADDING;
+        double minX = radius + EDGE_PADDING, maxX = paneW - radius - EDGE_PADDING;
+        double minY = radius + EDGE_PADDING, maxY = paneH - radius - EDGE_PADDING;
 
-        // Fallback if pane is too small for chosen radius.
         if (maxX <= minX || maxY <= minY) {
-            radius = CircleSpawner.MIN_TRIAL_RADIUS;
+            radius = KidsTargetSpawner.MIN_TRIAL_RADIUS;
             minX = radius + EDGE_PADDING; maxX = paneW - radius - EDGE_PADDING;
             minY = radius + EDGE_PADDING; maxY = paneH - radius - EDGE_PADDING;
             if (maxX <= minX || maxY <= minY) return;
         }
 
-        final double centerX   = minX + model.getRandomGenerator().nextDouble() * (maxX - minX);
-        final double centerY   = minY + model.getRandomGenerator().nextDouble() * (maxY - minY);
+        final double centerX    = minX + model.getRandomGenerator().nextDouble() * (maxX - minX);
+        final double centerY    = minY + model.getRandomGenerator().nextDouble() * (maxY - minY);
         final double finalRadius = radius;
 
         SpawnContext ctx = new SpawnContext(model.getRandomGenerator(), model.getCirclePalette());
@@ -288,16 +244,32 @@ public class ExperimentController {
 
         drawingPane.getChildren().add(activeShape);
 
-        // Capture start time AFTER target is rendered.
-        trialStartTime = System.currentTimeMillis();
+        /*
+         * Pop-in animation: scale from 0 → 1 over 180ms.
+         * The star appears to "bounce" into existence, which is engaging for children
+         * and also gives a clear visual cue that a new target has appeared.
+         * We capture trialStartTime AFTER the animation completes so timing is fair.
+         */
+        activeShape.setScaleX(0);
+        activeShape.setScaleY(0);
+
+        ScaleTransition popIn = new ScaleTransition(Duration.millis(180), activeShape);
+        popIn.setFromX(0); popIn.setFromY(0);
+        popIn.setToX(1);   popIn.setToY(1);
+        popIn.setOnFinished(e -> trialStartTime = System.currentTimeMillis());
+        popIn.play();
 
         /*
          * CLICK HANDLER:
-         * Only the circle Node consumes the event (mouseEvent.consume()).
-         * Clicking the background pane does nothing — only the target responds.
+         * The star Group consumes the event so the pane background never fires.
+         * Only the target responds to clicks.
          */
         activeShape.setOnMouseClicked(mouseEvent -> {
+            // Ignore clicks during the pop-in animation (trialStartTime == 0).
+            if (trialStartTime == 0) { mouseEvent.consume(); return; }
+
             long elapsed = System.currentTimeMillis() - trialStartTime;
+            trialStartTime = 0;
 
             double targetDiameter = 2.0 * finalRadius;
             double distance = (trialNumber == 1)
@@ -305,7 +277,6 @@ public class ExperimentController {
                     : Math.hypot(centerX - lastTargetX, centerY - lastTargetY);
 
             recordTrial(trialNumber, targetDiameter, distance, elapsed);
-
             lastTargetX = centerX;
             lastTargetY = centerY;
 
@@ -322,10 +293,10 @@ public class ExperimentController {
     // -----------------------------------------------------------------------
 
     /**
-     * Writes one CSV row and flushes immediately.
+     * Writes one CSV row and flushes.
      *
      * @pre csvWriter != null AND trial >= 1
-     * @post Row written and flushed to CSV file.
+     * @post Row written and flushed.
      */
     private void recordTrial(int trial, double size, double distance, long timeMs) {
         csvWriter.printf("%d, %.1f, %.1f, %d%n", trial, size, distance, timeMs);
@@ -337,20 +308,20 @@ public class ExperimentController {
     // -----------------------------------------------------------------------
 
     /**
-     * Closes the CSV, shows completion UI and dialog, resets state.
+     * Closes CSV, shows fun completion UI and dialog, resets state.
      *
      * @pre trialNumber > TOTAL_TRIALS
-     * @post csvWriter closed; completion shown; trialNumber reset to 0; callback fired.
+     * @post csvWriter closed; completion shown; trialNumber reset; callback fired.
      */
     private void concludeExperiment() {
         if (csvWriter != null) { csvWriter.close(); csvWriter = null; }
 
         drawingPane.getChildren().clear();
-        statusProperty.set("Complete! Results saved to: " + CSV_FILENAME);
+        statusProperty.set("🎉 All done! Results in: " + CSV_FILENAME);
 
-        Text doneText = new Text("Experiment complete!\nResults saved to:\n" + CSV_FILENAME);
-        doneText.setFont(Font.font("SansSerif", FontWeight.BOLD, 22));
-        doneText.setFill(Color.STEELBLUE);
+        Text doneText = new Text("🎉 Great job! 🎉\nAll " + TOTAL_TRIALS + " stars clicked!\nResults saved to:\n" + CSV_FILENAME);
+        doneText.setFont(Font.font("SansSerif", FontWeight.BOLD, 26));
+        doneText.setFill(Color.web("#FF6B6B"));
         doneText.setTextAlignment(TextAlignment.CENTER);
 
         StackPane overlay = new StackPane(doneText);
@@ -360,14 +331,14 @@ public class ExperimentController {
         drawingPane.getChildren().add(overlay);
 
         Alert done = new Alert(Alert.AlertType.INFORMATION);
-        done.setTitle("Experiment Complete");
-        done.setHeaderText("All " + TOTAL_TRIALS + " trials finished!");
+        done.setTitle("🎉 You Did It!");
+        done.setHeaderText("All " + TOTAL_TRIALS + " stars clicked!");
         done.setContentText("Results saved to: " + CSV_FILENAME
-                + "\n\nYou may run another session via Go!, or quit.");
+                + "\n\nPress Go! to play again!");
         done.getButtonTypes().setAll(ButtonType.OK);
         done.showAndWait();
 
-        trialNumber = 0; // allow repeat session
+        trialNumber = 0;
         if (onExperimentComplete != null) onExperimentComplete.run();
     }
 
@@ -375,12 +346,7 @@ public class ExperimentController {
     // Utilities
     // -----------------------------------------------------------------------
 
-    /**
-     * Removes the active target from the pane if present.
-     *
-     * @pre drawingPane != null
-     * @post activeShape removed from pane and set to null.
-     */
+    /** @pre drawingPane != null  @post activeShape removed from pane. */
     private void removeActiveShapeIfPresent() {
         if (activeShape != null) {
             drawingPane.getChildren().remove(activeShape);
@@ -388,17 +354,10 @@ public class ExperimentController {
         }
     }
 
-    /**
-     * Displays a non-fatal error dialog without crashing.
-     *
-     * @pre title != null AND header != null AND details != null
-     * @post Modal error dialog shown; execution resumes after dismissal.
-     */
+    /** @pre all args non-null  @post Modal error dialog shown; execution continues. */
     private void showErrorDialog(String title, String header, String details) {
         Alert alert = new Alert(Alert.AlertType.ERROR);
-        alert.setTitle(title);
-        alert.setHeaderText(header);
-        alert.setContentText(details);
+        alert.setTitle(title); alert.setHeaderText(header); alert.setContentText(details);
         alert.showAndWait();
     }
 }

@@ -5,55 +5,58 @@ Term: Spring 2026
 ------------------------------------------------------------
 Overview
 ------------------------------------------------------------
-FittsLawFX is a JavaFX GUI application that conducts a Fitts' Law
-experiment. The user clicks 50 circular targets of varying sizes
-displayed at random positions. The app records each trial's data to
-a CSV file (fitts_results.csv) in the working directory.
+FittsLawApp is a JavaFX GUI that runs a 50-trial Fitts' Law
+experiment. The user clicks circular targets of varying sizes at
+random positions. Data is written to fitts_results.csv.
 
 ------------------------------------------------------------
-Files Included
+Project Structure
 ------------------------------------------------------------
-- src/main/java/com/example/hw4/FittsLawFX.java   (main source)
-- src/main/java/module-info.java
-- pom.xml
-- Makefile
-- readme.txt
-- mvnw / .mvn/
+src/main/java/
+  funshapes/app/        FittsLawApp.java          (entry point)
+  funshapes/controller/ ExperimentController.java  (trial loop, CSV)
+  funshapes/model/      AppModel.java              (RNG, palette)
+  funshapes/shapes/     CircleSpawner.java
+                        ShapeSpawner.java
+                        SpawnContext.java
+  module-info.java
+Extra Credit/           (see that folder's readme.txt)
+pom.xml / Makefile / mvnw
 
 ------------------------------------------------------------
 How to Compile and Run (SoC Linux / ada)
 ------------------------------------------------------------
-All commands run from the project root (same directory as Makefile).
+From the project root (same directory as Makefile):
 
-If mvnw is not executable after unzipping:
-   chmod +x mvnw
-
-Available Makefile targets:
-
-  make compile    – compile only
-  make run        – compile and launch the GUI
-  make clean      – remove build artifacts
-  make rebuild    – clean then compile
+  chmod +x mvnw          # if needed after unzip
+  make compile           # compile
+  make run               # compile and launch
+  make clean             # remove build artifacts
+  make rebuild           # clean then compile
 
 ------------------------------------------------------------
 How to Use
 ------------------------------------------------------------
-1. Launch with: make run
-2. Select File → Go! to begin.
-3. A 5-to-0 countdown is displayed.
+1. make run
+2. Press Go! (or Ctrl+G) to begin.
+3. Watch the 5-to-0 countdown.
 4. Click each circular target as quickly as possible.
-5. After 50 trials, a dialog confirms completion.
-6. Results are saved to fitts_results.csv in the current directory.
+5. After 50 trials a dialog confirms completion.
+6. CSV data: fitts_results.csv (in the working directory)
 
 CSV format:
-  Trial Number, Target Size (pixels), Distance to Target (pixels), Time to Click (ms)
+  Trial Number, Target Size (pixels), Distance (pixels), Time (ms)
 
 ------------------------------------------------------------
 Design Notes
 ------------------------------------------------------------
-- Targets vary in radius from 15 to 80 pixels.
-- Only the circle itself responds to clicks (not the background pane).
-- Distance is the Euclidean distance between consecutive target centers.
-- Trial 1 reports distance = 0 (no prior target exists).
-- The CSV is flushed after every row to prevent data loss.
-- All program exits are routed through a single controlled exit method.
+- HBox top bar: Go! and Quit! buttons (no menu bar)
+- Window X button / minimize work as normal (OS decorations untouched)
+- Right panel shows live trial status bound to controller property
+- Target radius: random 15–80px per trial
+- Only the circle target responds to clicks (background ignored)
+- Distance = Euclidean distance between consecutive target centers
+- Trial 1 distance = 0 (no prior target)
+- CSV flushed per row to prevent data loss on early exit
+- Go! disabled mid-session; re-enabled after completion for repeat runs
+- Ctrl+G = Go!, Ctrl+Q = Quit

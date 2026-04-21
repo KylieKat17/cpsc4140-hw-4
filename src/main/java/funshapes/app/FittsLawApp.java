@@ -4,154 +4,225 @@ import funshapes.controller.ExperimentController;
 import funshapes.model.AppModel;
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.Scene;
-import javafx.scene.control.Menu;
-import javafx.scene.control.MenuBar;
-import javafx.scene.control.MenuItem;
-import javafx.scene.control.SeparatorMenuItem;
-import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.Pane;
+import javafx.scene.control.Button;
+import javafx.scene.control.Label;
+import javafx.scene.control.Separator;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.input.KeyCombination;
+import javafx.scene.layout.*;
+import javafx.scene.paint.Color;
+import javafx.scene.text.Font;
+import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
-import javafx.stage.WindowEvent;
 
 /**
- * FittsLawApp is the JavaFX application entry point for the HW-4 Fitts' Law simulator.
+ * FittsLawApp is the JavaFX entry point for the HW-4 Fitts' Law Simulator.
  *
  * <p>
- * UI layout:
+ * UI layout (mirrors the dare edition structure):
  * <ul>
- *   <li>Top: menu bar with File → Go! and Quit</li>
+ *   <li>Top HBox: title label (left), Go! and Quit! buttons (right)</li>
  *   <li>Center: drawing pane where targets appear</li>
+ *   <li>Right: status panel showing trial progress (bound to controller)</li>
  * </ul>
  * </p>
  *
  * <p>
- * Selecting Go! hands control to {@link ExperimentController}, which runs the
- * full 50-trial session, records data to a CSV, and re-enables Go! on completion.
- * All exits are routed through {@code requestProgramExit()} so the app never
- * terminates without closing the CSV writer first.
+ * Window decorations (X button, minimize, resize) are intentionally left at
+ * JavaFX defaults so the user can minimize or close at will. Closing mid-session
+ * triggers forceClose() on the controller so the CSV is always flushed first.
  * </p>
  *
  * <b>Correspondences:</b><br>
- *   model      = shared AppModel (RNG, palette)<br>
- *   controller = ExperimentController driving the trial loop<br>
- *   goMenuItem = disabled while an experiment is running
+ *   model      = AppModel (RNG, palette)<br>
+ *   controller = ExperimentController (trial loop, CSV, timing)<br>
+ *   goButton   = disabled while a session runs; re-enabled on completion
  *
  * @author Kylie Gilbert
  * @version HW-4 – CPSC 4140 – Spring 2026
  */
 public class FittsLawApp extends Application {
 
-    /** Shared application model. */
-    private AppModel model;
-
-    /** Drives the experiment: countdown, trial loop, CSV output. */
     private ExperimentController controller;
-
-    /** Kept so it can be disabled during a session and re-enabled after. */
-    private MenuItem goMenuItem;
+    private Button goButton;
 
     // -----------------------------------------------------------------------
     // JavaFX lifecycle
     // -----------------------------------------------------------------------
 
     /**
-     * Initializes and displays the primary application window.
+     * Builds the window and wires the controller.
      *
-     * @param primaryStage the primary application stage provided by JavaFX
+     * @param primaryStage the primary application stage
      *
      * @pre primaryStage != null
-     * @post A window with a menu bar and blank drawing pane is visible.
-     *       All window-close events are routed through requestProgramExit().
+     * @post Window is visible with top bar, drawing pane, and status panel.
      */
     @Override
     public void start(Stage primaryStage) {
 
-        // ----- Model -----
-        model = new AppModel();
+        AppModel model = new AppModel();
 
         // ----- Root layout -----
         BorderPane root = new BorderPane();
 
-        // ----- Drawing pane -----
+        // ----- Center drawing pane -----
         Pane drawingPane = new Pane();
         drawingPane.setStyle("-fx-background-color: #f0f0f0;");
         root.setCenter(drawingPane);
 
         // ----- Controller -----
         controller = new ExperimentController(model, drawingPane);
+        controller.setOnExperimentComplete(() -> goButton.setDisable(false));
 
-        // Re-enable Go! when a session finishes so the user can run another.
-        controller.setOnExperimentComplete(() -> goMenuItem.setDisable(false));
+        // ----- Right status panel (mirrors dare edition's config panel) -----
+        VBox statusPanel = buildStatusPanel();
+        root.setRight(statusPanel);
 
-        // ----- Menu bar -----
-        MenuBar menuBar = new MenuBar();
-        menuBar.setUseSystemMenuBar(false);
+        // Bind the live status label to the controller's observable property.
+        Label liveStatus = (Label) statusPanel.lookup("#liveStatus");
+        if (liveStatus != null) {
+            liveStatus.textProperty().bind(controller.statusProperty());
+        }
 
-        Menu fileMenu = new Menu("File");
-        goMenuItem = new MenuItem("Go!");
-        MenuItem quitMenuItem = new MenuItem("Quit");
+        // ----- Top bar (HBox — same pattern as dare edition) -----
+        root.setTop(buildTopBar(primaryStage));
 
-        goMenuItem.setOnAction(event -> {
-            goMenuItem.setDisable(true); // disable until session ends
-            // Defer by one pulse so layout dimensions are finalized.
-            Platform.runLater(controller::beginExperiment);
-        });
+        // ----- Scene -----
+        Scene scene = new Scene(root, 950, 680);
 
-        quitMenuItem.setOnAction(event ->
-                requestProgramExit("Quit selected from File menu.")
+        // Keyboard shortcuts: Ctrl+G = Go!, Ctrl+Q = Quit
+        scene.getAccelerators().put(
+                new KeyCodeCombination(KeyCode.G, KeyCombination.CONTROL_DOWN),
+                () -> { if (!goButton.isDisabled()) triggerGo(); }
+        );
+        scene.getAccelerators().put(
+                new KeyCodeCombination(KeyCode.Q, KeyCombination.CONTROL_DOWN),
+                () -> requestExit(primaryStage, "Ctrl+Q shortcut used.")
         );
 
-        fileMenu.getItems().addAll(goMenuItem, new SeparatorMenuItem(), quitMenuItem);
-        menuBar.getMenus().add(fileMenu);
-        root.setTop(menuBar);
-
-        // ----- Scene / Stage -----
-        Scene scene = new Scene(root, 900, 700);
         primaryStage.setTitle("HW-4: Fitts' Law Simulator – Kylie Gilbert");
         primaryStage.setScene(scene);
 
-        // Intercept OS close button for controlled termination.
-        primaryStage.setOnCloseRequest(this::handleWindowCloseRequest);
+        /*
+         * Window close (X button) is left at the JavaFX default so the user can
+         * minimize and use OS controls freely, matching the dare edition behavior.
+         * We add a handler solely to flush the CSV before the process exits.
+         */
+        primaryStage.setOnCloseRequest(e -> controller.forceClose());
+
         primaryStage.show();
     }
 
     // -----------------------------------------------------------------------
-    // Event handlers
+    // UI builders
     // -----------------------------------------------------------------------
 
     /**
-     * Intercepts the OS window close button and routes termination through
-     * the controlled exit method so the CSV writer is always closed first.
+     * Builds the top HBox bar containing the app title and action buttons.
+     * Mirrors the dare edition's HBox top bar pattern exactly.
      *
-     * @param event the close request event from the OS
+     * @param stage the primary stage (used for the Quit! action)
      *
-     * @pre event != null
-     * @post Default close behavior is suppressed; requestProgramExit() is called.
+     * @pre stage != null
+     * @post Returns a styled HBox with title label, spacer, Go!, and Quit! buttons.
      */
-    private void handleWindowCloseRequest(WindowEvent event) {
-        event.consume();
-        requestProgramExit("Window close button (X) was used.");
+    private HBox buildTopBar(Stage stage) {
+        Label titleLabel = new Label("Fitts' Law Simulator");
+        titleLabel.setFont(Font.font("SansSerif", FontWeight.BOLD, 15));
+
+        goButton = new Button("Go!");
+        goButton.setStyle("-fx-font-weight: bold;");
+        goButton.setOnAction(e -> triggerGo());
+
+        Button quitButton = new Button("Quit!");
+        quitButton.setOnAction(e -> requestExit(stage, "Quit! button pressed."));
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        HBox topBar = new HBox(10, titleLabel, spacer, goButton, quitButton);
+        topBar.setStyle(
+                "-fx-padding: 8;" +
+                "-fx-alignment: center-left;" +
+                "-fx-border-color: #dddddd;" +
+                "-fx-border-width: 0 0 1 0;"
+        );
+        return topBar;
+    }
+
+    /**
+     * Builds the right-side status panel that shows experiment info.
+     * Uses the same width and border style as the dare edition's config host.
+     *
+     * @pre none
+     * @post Returns a VBox with a heading and a live status label (id="liveStatus").
+     */
+    private VBox buildStatusPanel() {
+        Label heading = new Label("Experiment Status");
+        heading.setFont(Font.font("SansSerif", FontWeight.BOLD, 13));
+
+        Label liveStatus = new Label("Ready — press Go! to begin.");
+        liveStatus.setId("liveStatus");
+        liveStatus.setWrapText(true);
+
+        Separator sep = new Separator();
+
+        Label hint1 = new Label("• Click targets as fast as you can.");
+        Label hint2 = new Label("• Only the target responds to clicks.");
+        Label hint3 = new Label("• Results saved to fitts_results.csv");
+        Label trialInfo = new Label("Trials: " + ExperimentController.TOTAL_TRIALS);
+
+        for (Label l : new Label[]{hint1, hint2, hint3, trialInfo}) {
+            l.setWrapText(true);
+            l.setStyle("-fx-text-fill: #555555;");
+        }
+
+        VBox panel = new VBox(10,
+                heading, liveStatus, sep, hint1, hint2, hint3, trialInfo);
+        panel.setPadding(new Insets(12));
+        panel.setMinWidth(240);
+        panel.setPrefWidth(260);
+        panel.setStyle(
+                "-fx-border-color: #bbbbbb;" +
+                "-fx-border-width: 0 0 0 1;" +
+                "-fx-background-color: #fafafa;"
+        );
+        panel.setAlignment(Pos.TOP_LEFT);
+        return panel;
     }
 
     // -----------------------------------------------------------------------
-    // Exit
+    // Actions
     // -----------------------------------------------------------------------
 
     /**
-     * Centralized, controlled exit point for the application.
-     * Always closes the CSV writer before terminating so data is not lost.
+     * Disables Go! and starts the experiment via the controller.
      *
-     * @param reason brief description of the termination trigger (for logging)
+     * @pre goButton is not disabled
+     * @post goButton is disabled; controller.beginExperiment() is called on next pulse.
+     */
+    private void triggerGo() {
+        goButton.setDisable(true);
+        Platform.runLater(controller::beginExperiment);
+    }
+
+    /**
+     * Flushes the CSV writer and exits the application.
+     *
+     * @param stage  the primary stage (unused but kept for clarity)
+     * @param reason brief log message
      *
      * @pre reason != null
-     * @post controller.forceClose() is called; Platform.exit() terminates the app.
+     * @post controller.forceClose() called; Platform.exit() terminates the app.
      */
-    private void requestProgramExit(String reason) {
+    private void requestExit(Stage stage, String reason) {
         System.out.println("Exiting: " + reason);
-        if (controller != null) {
-            controller.forceClose(); // flush and close CSV if mid-experiment
-        }
+        controller.forceClose();
         Platform.exit();
     }
 
@@ -160,14 +231,8 @@ public class FittsLawApp extends Application {
     // -----------------------------------------------------------------------
 
     /**
-     * Program entry point.
-     *
-     * @param args command-line arguments (unused)
-     *
      * @pre none
-     * @post JavaFX runtime is launched; start(Stage) is invoked by the framework.
+     * @post JavaFX runtime launched; start(Stage) invoked by framework.
      */
-    public static void main(String[] args) {
-        launch(args);
-    }
+    public static void main(String[] args) { launch(args); }
 }
