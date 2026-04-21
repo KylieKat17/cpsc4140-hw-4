@@ -115,6 +115,8 @@ public class FittsLawApp extends Application {
          */
         primaryStage.setOnCloseRequest(e -> controller.forceClose());
 
+        // Launch maximized so the window fits the screen without needing to resize.
+        primaryStage.setMaximized(true);
         primaryStage.show();
     }
 
