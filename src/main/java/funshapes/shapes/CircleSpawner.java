@@ -55,8 +55,6 @@ public class CircleSpawner implements ShapeSpawner {
         Color[] palette = context.getCirclePalette();
         Color fill = palette[context.getRandomGenerator().nextInt(palette.length)];
         Circle circle = new Circle(cx, cy, radius, fill);
-        circle.setStroke(Color.WHITE);
-        circle.setStrokeWidth(3);
         return circle;
     }
 }
