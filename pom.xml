@@ -7,7 +7,7 @@
     <groupId>com.example</groupId>
     <artifactId>HW4</artifactId>
     <version>1.0-SNAPSHOT</version>
-    <name>HW1</name>
+    <name>HW4</name>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
